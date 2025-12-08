@@ -3,13 +3,11 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
+import java.text.NumberFormat;
 
 /*
 AccountingApp.java
@@ -21,6 +19,7 @@ AccountingApp.java
  Note: For production money calculations use BigDecimal.
 */
 
+// ===================== LOGIN FORM ===================== //
 class LoginForm extends JFrame {
     private JTextField userField;
     private JPasswordField passField;
@@ -85,8 +84,9 @@ class LoginForm extends JFrame {
 
         JOptionPane.showMessageDialog(this, "Invalid username or password.");
     }
-
 }
+
+// ===================== SIGNUP FORM ===================== //
 class SignupForm extends JFrame {
     private JTextField userField;
     private JPasswordField passField;
@@ -144,7 +144,47 @@ class SignupForm extends JFrame {
         }
     }
 }
+
+// ===================== ACCOUNTING APP ===================== //
 public class AccountingApp extends JFrame {
+    // Header / navbar
+    private JPanel createHeader() {
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(new Color(0, 128, 0)); 
+
+        JLabel companyName = new JLabel("Accounting System");
+        companyName.setForeground(Color.WHITE);
+        companyName.setFont(new Font("Arial", Font.BOLD, 18));
+        companyName.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
+
+        JPanel menuPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        menuPanel.setOpaque(false);
+
+        JButton homeBtn = new JButton("Home");
+        JButton aboutBtn = new JButton("About");
+        JButton menuBtn = new JButton("▼"); // dropdown arrow
+
+        JPopupMenu popup = new JPopupMenu();
+        JMenuItem logoutItem = new JMenuItem("Sign out");
+
+        popup.add(logoutItem);
+
+        menuBtn.addActionListener(e -> popup.show(menuBtn, 0, menuBtn.getHeight()));
+        logoutItem.addActionListener(e -> {
+            dispose();
+            new LoginForm();
+        });
+
+        menuPanel.add(homeBtn);
+        menuPanel.add(aboutBtn);
+        menuPanel.add(menuBtn);
+
+        header.add(companyName, BorderLayout.WEST);
+        header.add(menuPanel, BorderLayout.EAST);
+
+        return header;
+    }
+
     private List<Account> accounts;
     private List<Transaction> transactions;
     private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -161,10 +201,16 @@ public class AccountingApp extends JFrame {
     private JComboBox<String> creditComboGlobal;
 
     public AccountingApp() {
+        // set layout so we can add header + center content
+        setLayout(new BorderLayout());
+
         sdf.setLenient(false);
         accounts = new ArrayList<>();
         transactions = new ArrayList<>();
         addPredefinedAccounts();
+
+        // header/navbar
+        add(createHeader(), BorderLayout.NORTH);
 
         JTabbedPane tabbedPane = new JTabbedPane();
 
@@ -175,7 +221,7 @@ public class AccountingApp extends JFrame {
         tabbedPane.addTab("General Ledger", createGeneralLedgerPanel());
         tabbedPane.addTab("Balance Sheet", createBalanceSheetPanel());
 
-        add(tabbedPane);
+        add(tabbedPane, BorderLayout.CENTER);
         setTitle("Accounting App");
         setSize(1000, 650);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -183,6 +229,20 @@ public class AccountingApp extends JFrame {
         setVisible(true);
 
         refreshAllViews();
+    }
+
+    private String formatNumber(double value) {
+        NumberFormat nf = NumberFormat.getNumberInstance(Locale.US);
+        nf.setMinimumFractionDigits(2);
+        nf.setMaximumFractionDigits(2);
+        return nf.format(value); // 12345.67 -> 12,345.67
+    }
+
+    private String formatAccounting(double value) {
+        if (value < 0) {
+            return "(" + formatNumber(Math.abs(value)) + ")";
+        }
+        return formatNumber(value);
     }
 
     private static class Account {
@@ -237,7 +297,6 @@ public class AccountingApp extends JFrame {
         public double getAmount() { return amount; }
     }
 
-
     private void addPredefinedAccounts() {
         String[][] predefined = {
             {"Cash", "Asset"},
@@ -273,7 +332,6 @@ public class AccountingApp extends JFrame {
             accounts.add(new Account(acc[0], acc[1], 0.0));
         }
     }
-
 
     private JPanel createAddTransactionPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -320,7 +378,6 @@ public class AccountingApp extends JFrame {
             String debitAccName = (String) debitComboGlobal.getSelectedItem();
             String creditAccName = (String) creditComboGlobal.getSelectedItem();
             String amtStr = amountField.getText().trim();
-
 
             Date date;
             try {
@@ -369,8 +426,8 @@ public class AccountingApp extends JFrame {
             dateField.setText(sdf.format(new Date()));
             descField.setText("");
             amountField.setText("");
-            debitComboGlobal.setSelectedIndex(0);
-            creditComboGlobal.setSelectedIndex(0);
+            if (debitComboGlobal.getItemCount() > 0) debitComboGlobal.setSelectedIndex(0);
+            if (creditComboGlobal.getItemCount() > 0) creditComboGlobal.setSelectedIndex(0);
         });
 
         clearBtn.addActionListener(e -> {
@@ -427,12 +484,11 @@ public class AccountingApp extends JFrame {
                         tx.getDescription(),
                         tx.getDebitAccount(),
                         tx.getCreditAccount(),
-                        String.format(Locale.US, "%.2f", tx.getAmount())
+                        formatAccounting(tx.getAmount())
                 });
             }
         }
     }
-
 
     private JPanel createAccountsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -496,7 +552,6 @@ public class AccountingApp extends JFrame {
         return panel;
     }
 
-
     private JPanel createGeneralJournalPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         String[] cols = {"Date", "Description", "Account", "Debit", "Credit"};
@@ -508,7 +563,6 @@ public class AccountingApp extends JFrame {
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
         return panel;
     }
-
 
     private JPanel createGeneralLedgerPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -535,7 +589,6 @@ public class AccountingApp extends JFrame {
         return panel;
     }
 
-
     private void updateGeneralLedgerTable(String accountName) {
         ledgerTableModel.setRowCount(0);
         Account acc = getAccountByName(accountName);
@@ -543,7 +596,6 @@ public class AccountingApp extends JFrame {
 
         double running = 0.0;
         for (Transaction tx : transactions) {
-            boolean affected = false;
             double amount = tx.getAmount();
             String dateStr = sdf.format(tx.getDate());
             if (tx.getDebitAccount().equals(accountName)) {
@@ -553,9 +605,8 @@ public class AccountingApp extends JFrame {
                     running -= amount;
                 }
                 ledgerTableModel.addRow(new Object[]{dateStr, tx.getDescription(), tx.getDebitAccount(), tx.getCreditAccount(),
-                        String.format(Locale.US, "%.2f", amount),
-                        String.format(Locale.US, "%.2f", running)});
-                affected = true;
+                        formatAccounting(amount),
+                        formatAccounting(running)});
             }
             if (tx.getCreditAccount().equals(accountName)) {
                 if (acc.getType().equals("Liability") || acc.getType().equals("Owner's Equity") || acc.getType().equals("Revenue")) {
@@ -564,13 +615,11 @@ public class AccountingApp extends JFrame {
                     running -= amount;
                 }
                 ledgerTableModel.addRow(new Object[]{dateStr, tx.getDescription(), tx.getDebitAccount(), tx.getCreditAccount(),
-                        String.format(Locale.US, "%.2f", amount),
-                        String.format(Locale.US, "%.2f", running)});
-                affected = true;
+                        formatAccounting(amount),
+                        formatAccounting(running)});
             }
         }
     }
-
 
     private JPanel createBalanceSheetPanel() {
         JPanel panel = new JPanel(new GridLayout(1,2));
@@ -602,10 +651,9 @@ public class AccountingApp extends JFrame {
         panel.add(assetsPanel);
         panel.add(liabilitiesPanel);
 
-
         Runnable updateLabels = () -> {
-            totalAssetsLabel.setText("Total Assets: " + String.format(Locale.US, "%.2f", calculateTotalAssets()));
-            totalLiabLabel.setText("Total Liabilities and Equity: " + String.format(Locale.US, "%.2f", calculateTotalLiabilitiesAndEquity()));
+            totalAssetsLabel.setText("Total Assets: " + formatAccounting(calculateTotalAssets()));
+            totalLiabLabel.setText("Total Liabilities and Equity: " + formatAccounting(calculateTotalLiabilitiesAndEquity()));
         };
 
         updateLabels.run();
@@ -613,7 +661,6 @@ public class AccountingApp extends JFrame {
         panel.putClientProperty("updateLabels", updateLabels);
         return panel;
     }
-
 
     private Account getAccountByName(String name) {
         for (Account a : accounts) {
@@ -624,17 +671,13 @@ public class AccountingApp extends JFrame {
 
     private List<String> getDebitAccountNames() {
         List<String> out = new ArrayList<>();
-        for (Account a : accounts) {
-            if (a.getType().equals("Asset") || a.getType().equals("Expense")) out.add(a.getName());
-        }
+        for (Account a : accounts) out.add(a.getName()); // ALL ACCOUNTS can be debited
         return out;
     }
 
     private List<String> getCreditAccountNames() {
         List<String> out = new ArrayList<>();
-        for (Account a : accounts) {
-            if (a.getType().equals("Liability") || a.getType().equals("Owner's Equity") || a.getType().equals("Revenue")) out.add(a.getName());
-        }
+        for (Account a : accounts) out.add(a.getName()); // ALL ACCOUNTS can be credited
         return out;
     }
 
@@ -676,7 +719,7 @@ public class AccountingApp extends JFrame {
         if (accountsTableModel != null) {
             accountsTableModel.setRowCount(0);
             for (Account a : accounts) {
-                accountsTableModel.addRow(new Object[]{a.getName(), a.getType(), String.format(Locale.US, "%.2f", a.getBalance())});
+                accountsTableModel.addRow(new Object[]{a.getName(), a.getType(), formatAccounting(a.getBalance())});
             }
         }
 
@@ -684,10 +727,16 @@ public class AccountingApp extends JFrame {
             journalTableModel.setRowCount(0);
             for (Transaction tx : transactions) {
                 String dateStr = sdf.format(tx.getDate());
-                journalTableModel.addRow(new Object[]{dateStr, tx.getDescription(), tx.getDebitAccount(),
-                        String.format(Locale.US, "%.2f", tx.getAmount()), ""});
-                journalTableModel.addRow(new Object[]{dateStr, tx.getDescription(), tx.getCreditAccount(),
-                        "", String.format(Locale.US, "%.2f", tx.getAmount())});
+                // debit row
+                journalTableModel.addRow(new Object[]{
+                dateStr, tx.getDescription(), tx.getDebitAccount(),
+                formatAccounting(tx.getAmount()), ""
+                 });
+                journalTableModel.addRow(new Object[]{
+                dateStr, tx.getDescription(), tx.getCreditAccount(),
+                "", formatAccounting(tx.getAmount())
+            });
+
             }
         }
 
@@ -704,21 +753,25 @@ public class AccountingApp extends JFrame {
             liabilitiesTableModel.setRowCount(0);
             for (Account a : accounts) {
                 if (a.getType().equals("Asset")) {
-                    assetsTableModel.addRow(new Object[]{a.getName(), String.format(Locale.US, "%.2f", a.getBalance())});
+                    assetsTableModel.addRow(new Object[]{a.getName(), formatAccounting(a.getBalance())});
                 } else if (a.getType().equals("Liability") || a.getType().equals("Owner's Equity")) {
-                    liabilitiesTableModel.addRow(new Object[]{a.getName(), String.format(Locale.US, "%.2f", a.getBalance())});
+                    liabilitiesTableModel.addRow(new Object[]{a.getName(), formatAccounting(a.getBalance())});
                 }
             }
         }
 
         refreshAccountCombos();
-
-        JTabbedPane tp = (JTabbedPane) getContentPane().getComponent(0);
-        for (int i = 0; i < tp.getTabCount(); i++) {
-            Component c = tp.getComponentAt(i);
-            if (c instanceof JPanel) {
-                Object prop = ((JPanel) c).getClientProperty("updateLabels");
-                if (prop instanceof Runnable) ((Runnable) prop).run();
+        
+        // run any UI label updaters (balance sheet totals)
+        Component center = getContentPane().getComponent(1); // tabbed pane
+        if (center instanceof JTabbedPane) {
+            JTabbedPane tp = (JTabbedPane) center;
+            for (int i = 0; i < tp.getTabCount(); i++) {
+                Component c = tp.getComponentAt(i);
+                if (c instanceof JPanel) {
+                    Object prop = ((JPanel) c).getClientProperty("updateLabels");
+                    if (prop instanceof Runnable) ((Runnable) prop).run();
+                }
             }
         }
     }
@@ -735,9 +788,40 @@ public class AccountingApp extends JFrame {
     }
 
     private double calculateTotalLiabilitiesAndEquity() {
-        double sum = 0;
-        for (Account a : accounts) if (a.getType().equals("Liability") || a.getType().equals("Owner's Equity")) sum += a.getBalance();
-        return sum;
+        double total = 0;
+
+        double capital = 0;
+        double drawing = 0;
+        double revenue = 0;
+        double expense = 0;
+
+        for (Account a : accounts) {
+            switch (a.getType()) {
+                case "Liability":
+                    total += a.getBalance();
+                    break;
+
+                case "Owner's Equity":
+                    if (a.getName().equals("Owner's Capital"))
+                        capital += a.getBalance();
+                    else if (a.getName().equals("Owner's Drawing"))
+                        drawing += a.getBalance();
+                    break;
+
+                case "Revenue":
+                    revenue += a.getBalance();
+                    break;
+
+                case "Expense":
+                    expense += a.getBalance();
+                    break;
+            }
+        }
+
+        double netIncome = revenue - expense;
+        double equity = capital - drawing + netIncome;
+
+        return total + equity;
     }
 
     private JPanel createGeneralJournalPanelWrapper() {
@@ -768,6 +852,5 @@ public class AccountingApp extends JFrame {
 
     public static void main(String[] args) {
         new LoginForm();
-        // SwingUtilities.invokeLater(AccountingApp::new);
     }
 }
