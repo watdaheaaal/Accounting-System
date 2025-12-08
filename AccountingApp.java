@@ -1,204 +1,81 @@
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
-import java.sql.*;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
 import java.text.NumberFormat;
-import java.util.logging.Logger;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 
-/*
- Cleaned and fixed AccountingApp.java
- - Single file containing LoginForm, SignupForm and AccountingApp
- - Fixed missing refresh/update functions
- - Added Balance Sheet label fields for updating totals
- - DatabaseManager included (in-memory sqlite). Add sqlite-jdbc to classpath if you want DB features.
- Note: For production money use BigDecimal. This is for learning/demo.
-*/
-
-class LoginForm extends JFrame {
-    private JTextField userField;
-    private JPasswordField passField;
-
-    public LoginForm() {
-        setTitle("Login");
-        setSize(350, 200);
-        setLocationRelativeTo(null);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-
-        JPanel panel = new JPanel(new GridLayout(3, 2, 10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
-
-        panel.add(new JLabel("Username:"));
-        userField = new JTextField();
-        panel.add(userField);
-
-        panel.add(new JLabel("Password:"));
-        passField = new JPasswordField();
-        panel.add(passField);
-
-        JButton loginBtn = new JButton("Login");
-        JButton signupBtn = new JButton("Signup");
-
-        panel.add(loginBtn);
-        panel.add(signupBtn);
-
-        add(panel);
-
-        loginBtn.addActionListener(e -> login());
-        signupBtn.addActionListener(e -> {
-            new SignupForm();
-            dispose();
-        });
-
-        setVisible(true);
-    }
-
-    private void login() {
-        String user = userField.getText().trim();
-        String pass = new String(passField.getPassword());
-
-        if (user.isEmpty() || pass.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Fill all fields.");
-            return;
-        }
-
-        File f = new File("users.txt");
-        if (!f.exists()) {
-            JOptionPane.showMessageDialog(this, "No users found. Please signup first.");
-            return;
-        }
-
-        try (BufferedReader br = new BufferedReader(new FileReader("users.txt"))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                String[] parts = line.split(":");
-                if (parts.length == 2 && parts[0].equals(user) && parts[1].equals(pass)) {
-                    JOptionPane.showMessageDialog(this, "Login successful!");
-                    new AccountingApp();
-                    dispose();
-                    return;
-                }
-            }
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this, "Error reading users file.");
-        }
-
-        JOptionPane.showMessageDialog(this, "Invalid username or password.");
-    }
-}
-
-class SignupForm extends JFrame {
-    private JTextField userField;
-    private JPasswordField passField;
-
-    public SignupForm() {
-        setTitle("Signup");
-        setSize(350, 200);
-        setLocationRelativeTo(null);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-
-        JPanel panel = new JPanel(new GridLayout(3, 2, 10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
-
-        panel.add(new JLabel("New Username:"));
-        userField = new JTextField();
-        panel.add(userField);
-
-        panel.add(new JLabel("New Password:"));
-        passField = new JPasswordField();
-        panel.add(passField);
-
-        JButton registerBtn = new JButton("Register");
-        JButton backBtn = new JButton("Back");
-
-        panel.add(registerBtn);
-        panel.add(backBtn);
-
-        add(panel);
-
-        registerBtn.addActionListener(e -> signup());
-        backBtn.addActionListener(e -> {
-            new LoginForm();
-            dispose();
-        });
-
-        setVisible(true);
-    }
-
-    private void signup() {
-        String user = userField.getText().trim();
-        String pass = new String(passField.getPassword());
-
-        if (user.isEmpty() || pass.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Fill all fields.");
-            return;
-        }
-
-        try (FileWriter fw = new FileWriter("users.txt", true)) {
-            fw.write(user + ":" + pass + "\n");
-            JOptionPane.showMessageDialog(this, "Signup successful!");
-            new LoginForm();
-            dispose();
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this, "Error writing user file.");
-        }
-    }
-}
-
+// ===================== ACCOUNTING APP (Standalone) ===================== //
 public class AccountingApp extends JFrame {
-    // Core data
+
+    // --- Private Fields ---
     private List<Account> accounts;
     private List<Transaction> transactions;
     private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    private NumberFormat currencyFormat; 
 
-    // Table models for UI
+    // UI Components
     private DefaultTableModel transactionsTableModel;
     private DefaultTableModel accountsTableModel;
     private DefaultTableModel journalTableModel;
     private DefaultTableModel ledgerTableModel;
     private DefaultTableModel assetsTableModel;
     private DefaultTableModel liabilitiesTableModel;
-
-    // UI controls that need cross-method access
     private JComboBox<String> ledgerAccountCombo;
     private JComboBox<String> debitComboGlobal;
     private JComboBox<String> creditComboGlobal;
+    private JTabbedPane mainTabbedPane;
 
-    // Balance sheet labels (class fields so we can update them anywhere)
-    private JLabel totalAssetsLabel;
-    private JLabel totalLiabLabel;
+    // Design Colors
+    private final Color PRIMARY_BLUE = new Color(20, 50, 80); // Dark Blue
+    private final Color SECONDARY_MINT = new Color(0, 191, 165); // Mint Green/Teal
+    private final Color BACKGROUND_LIGHT = new Color(245, 248, 250);
 
     public AccountingApp() {
+        // Set up formatting and data
         setLayout(new BorderLayout());
         sdf.setLenient(false);
-
         accounts = new ArrayList<>();
         transactions = new ArrayList<>();
         addPredefinedAccounts();
+        
+        currencyFormat = NumberFormat.getNumberInstance(Locale.US);
+        currencyFormat.setMinimumFractionDigits(2);
+        currencyFormat.setMaximumFractionDigits(2);
+        
+        // Apply look and feel (Modernize the UI)
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            // Ignore if L&F can't be set
+        }
 
+        // Header/navbar
         add(createHeader(), BorderLayout.NORTH);
 
-        JTabbedPane tabbedPane = new JTabbedPane();
-        tabbedPane.addTab("Add New Transaction", createAddTransactionPanel());
-        tabbedPane.addTab("Transactions", createTransactionsPanel());
-        tabbedPane.addTab("Accounts", createAccountsPanel());
-        tabbedPane.addTab("General Journal", createGeneralJournalPanel());
-        tabbedPane.addTab("General Ledger", createGeneralLedgerPanel());
-        tabbedPane.addTab("Balance Sheet", createBalanceSheetPanel());
+        // Tabbed Pane for main content
+        mainTabbedPane = new JTabbedPane();
+        mainTabbedPane.setBackground(BACKGROUND_LIGHT);
+        mainTabbedPane.setForeground(PRIMARY_BLUE);
+        mainTabbedPane.setFont(new Font("Arial", Font.BOLD, 14));
 
-        add(tabbedPane, BorderLayout.CENTER);
-        setTitle("Accounting App");
-        setSize(1000, 650);
+        mainTabbedPane.addTab("Add New Transaction", createAddTransactionPanel());
+        mainTabbedPane.addTab("Transactions", createTransactionsPanel());
+        mainTabbedPane.addTab("Chart of Accounts", createAccountsPanel()); 
+        mainTabbedPane.addTab("General Journal", createGeneralJournalPanel());
+        mainTabbedPane.addTab("General Ledger", createGeneralLedgerPanel());
+        mainTabbedPane.addTab("Balance Sheet", createBalanceSheetPanel());
+
+        add(mainTabbedPane, BorderLayout.CENTER);
+        
+        setTitle("Accounting System");
+        setSize(1100, 700);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setVisible(true);
@@ -206,140 +83,62 @@ public class AccountingApp extends JFrame {
         refreshAllViews();
     }
 
-    // ===================== HEADER / ABOUT =====================
-    private JPanel createHeader() {
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(new Color(0, 128, 0));
-
-        // Left side: company name + quote/description
-        JPanel leftPanel = new JPanel(new GridLayout(2, 1));
-        leftPanel.setOpaque(false);
-
-        JLabel companyName = new JLabel("Accounting System");
-        companyName.setForeground(Color.WHITE);
-        companyName.setFont(new Font("Arial", Font.BOLD, 18));
-        companyName.setBorder(BorderFactory.createEmptyBorder(10, 15, 0, 15));
-
-        JLabel quoteLabel = new JLabel("<html><i>\"Organize your finances with clarity and efficiency.\"</i></html>");
-        quoteLabel.setForeground(Color.WHITE);
-        quoteLabel.setFont(new Font("Arial", Font.PLAIN, 12));
-        quoteLabel.setBorder(BorderFactory.createEmptyBorder(0, 15, 10, 15));
-
-        leftPanel.add(companyName);
-        leftPanel.add(quoteLabel);
-
-        // Right side: buttons and menu
-        JPanel menuPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 10));
-        menuPanel.setOpaque(false);
-
-        JButton homeBtn = new JButton("Home");
-        JButton aboutBtn = new JButton("About");
-
-        JButton openFolderBtn = new JButton("Open New Folder");
-        JButton saveBtn = new JButton("Save CSV");
-
-        JButton menuBtn = new JButton("▼");
-        JPopupMenu popup = new JPopupMenu();
-        JMenuItem logoutItem = new JMenuItem("Sign out");
-        popup.add(logoutItem);
-
-        menuBtn.addActionListener(e -> popup.show(menuBtn, 0, menuBtn.getHeight()));
-        logoutItem.addActionListener(e -> {
-            dispose();
-            new LoginForm();
-        });
-
-        aboutBtn.addActionListener(e -> showAbout());
-        openFolderBtn.addActionListener(e -> openFolderAction());
-        saveBtn.addActionListener(e -> saveCSVAction());
-
-        menuPanel.add(homeBtn);
-        menuPanel.add(aboutBtn);
-        menuPanel.add(openFolderBtn);
-        menuPanel.add(saveBtn);
-        menuPanel.add(menuBtn);
-
-        header.add(leftPanel, BorderLayout.WEST);
-        header.add(menuPanel, BorderLayout.EAST);
-
-        return header;
+    // --- Currency Formatting ---
+    private String formatCurrency(double value) {
+        return currencyFormat.format(value);
     }
-private void openFolderAction() {
-    JFileChooser chooser = new JFileChooser();
-    chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-    int result = chooser.showOpenDialog(this);
-    if (result == JFileChooser.APPROVE_OPTION) {
-        File selectedDir = chooser.getSelectedFile();
-        JOptionPane.showMessageDialog(this, "Opened folder: " + selectedDir.getAbsolutePath());
-        // Optional: add logic to load CSV files from this folder
-    }
-}
 
-private void saveCSVAction() {
-    JFileChooser chooser = new JFileChooser();
-    chooser.setSelectedFile(new File("goods.csv"));
-    int result = chooser.showSaveDialog(this);
-    if (result == JFileChooser.APPROVE_OPTION) {
-        File file = chooser.getSelectedFile();
-        try (PrintWriter pw = new PrintWriter(file)) {
-            // Save all accounts as CSV
-            pw.println("Account Name,Type,Balance");
-            for (Account a : accounts) {
-                pw.println(a.getName() + "," + a.getType() + "," + a.getBalance());
-            }
-            JOptionPane.showMessageDialog(this, "CSV saved: " + file.getAbsolutePath());
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this, "Error saving CSV: " + ex.getMessage());
+    private String formatAccounting(double value) {
+        if (value < 0) {
+            return "(" + formatCurrency(Math.abs(value)) + ")";
         }
-    }
-}
-
-    private void showAbout() {
-        JOptionPane.showMessageDialog(this,
-            "Accounting System\n\n" +
-            "A complete accounting application with support for:\n" +
-            "• Transaction management\n" +
-            "• Account management\n" +
-            "• General Journal and Ledger\n" +
-            "• Balance Sheet\n" +
-            "• Financial Reports\n\n" +
-            "Made by Team Kahagbungon(Group 1)\n",
-            "About",
-            JOptionPane.INFORMATION_MESSAGE);
+        return currencyFormat.format(value);
     }
 
-    // ===================== Domain classes =====================
-    private static class Account {
+    // --- Data Classes (Serializable for Save/Open) ---
+    // Ensure all internal types are also Serializable
+    private static class Account implements Serializable {
+        private static final long serialVersionUID = 1L; 
+        private String accountNumber; 
         private String name;
         private String type;
         private double balance;
 
-        public Account(String name, String type, double initialBalance) {
+        public Account(String accountNumber, String name, String type, double initialBalance) {
+            this.accountNumber = accountNumber;
             this.name = name;
             this.type = type;
             this.balance = initialBalance;
         }
+
+        public String getAccountNumber() { return accountNumber; }
         public String getName() { return name; }
         public String getType() { return type; }
         public double getBalance() { return balance; }
 
         public void applyDebit(double amount) {
-            if (type.equals("Asset") || type.equals("Expense")) {
+            // Asset, Expense, DRAWING increase with Debit
+            if (type.equals("Asset") || type.equals("Expense") || name.equals("Owner's Drawing")) {
                 balance += amount;
             } else {
+                // Liability, Revenue, CAPITAL decrease with Debit
                 balance -= amount;
             }
         }
+
         public void applyCredit(double amount) {
-            if (type.equals("Liability") || type.equals("Owner's Equity") || type.equals("Revenue")) {
+            // Liability, Revenue, CAPITAL increase with Credit
+            if (type.equals("Liability") || type.equals("Revenue") || name.equals("Owner's Capital")) {
                 balance += amount;
             } else {
+                // Asset, Expense, DRAWING decrease with Credit
                 balance -= amount;
             }
         }
     }
-
-    private static class Transaction {
+    
+    private static class Transaction implements Serializable {
+        private static final long serialVersionUID = 1L;
         private Date date;
         private String description;
         private String debitAccount;
@@ -361,62 +160,201 @@ private void saveCSVAction() {
         public double getAmount() { return amount; }
     }
 
-    // ===================== Predefined accounts =====================
+    // --- Setup and Helper Methods ---
+
+    private JPanel createHeader() {
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(PRIMARY_BLUE); 
+        header.setBorder(new EmptyBorder(10, 15, 10, 15));
+
+        // Left Panel (Title and Quote)
+        JPanel titlePanel = new JPanel(new GridLayout(2, 1));
+        titlePanel.setOpaque(false);
+        
+        JLabel companyName = new JLabel("Accounting System");
+        companyName.setForeground(Color.WHITE);
+        companyName.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        
+        JLabel systemQuote = new JLabel("Transactions . Accounts . General Journal . General Ledger . Balance Sheet");
+        systemQuote.setForeground(SECONDARY_MINT);
+        systemQuote.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        
+        titlePanel.add(companyName);
+        titlePanel.add(systemQuote);
+
+        // Right Panel (Buttons)
+        JPanel menuPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
+        menuPanel.setOpaque(false);
+        
+        JButton openBtn = createStyledButton("Open File");
+        JButton saveBtn = createStyledButton("Save");
+        
+        openBtn.addActionListener(e -> openFile());
+        saveBtn.addActionListener(e -> saveFile());
+
+        menuPanel.add(openBtn);
+        menuPanel.add(saveBtn);
+
+        header.add(titlePanel, BorderLayout.WEST);
+        header.add(menuPanel, BorderLayout.EAST);
+
+        return header;
+    }
+    
+    // Utility to create styled buttons
+    private JButton createStyledButton(String text) {
+        JButton btn = new JButton(text);
+        btn.setBackground(SECONDARY_MINT);
+        btn.setForeground(PRIMARY_BLUE);
+        btn.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        btn.setFocusPainted(false);
+        btn.setBorder(BorderFactory.createEmptyBorder(8, 15, 8, 15));
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        return btn;
+    }
+
     private void addPredefinedAccounts() {
         String[][] predefined = {
-            {"Cash", "Asset", "0"},
-            {"Accounts Receivable", "Asset", "0"},
-            {"Inventory", "Asset", "0"},
-            {"Supplies", "Asset", "0"},
-            {"Prepaid Expenses", "Asset", "0"},
-            {"Equipment", "Asset", "0"},
-            {"Furniture and Fixtures", "Asset", "0"},
-            {"Land", "Asset", "0"},
-            {"Buildings", "Asset", "0"},
-            {"Accounts Payable", "Liability", "0"},
-            {"Notes Payable", "Liability", "0"},
-            {"Salaries Payable", "Liability", "0"},
-            {"Rent Payable", "Liability", "0"},
-            {"Interest Payable", "Liability", "0"},
-            {"Unearned Revenue", "Liability", "0"},
-            {"Owner's Capital", "Owner's Equity", "0"},
-            {"Owner's Drawing", "Owner's Equity", "0"},
-            {"Service Revenue", "Revenue", "0"},
-            {"Sales Revenue", "Revenue", "0"},
-            {"Interest Income", "Revenue", "0"},
-            {"Salaries Expense", "Expense", "0"},
-            {"Rent Expense", "Expense", "0"},
-            {"Utilities Expense", "Expense", "0"},
-            {"Supplies Expense", "Expense", "0"},
-            {"Depreciation Expense", "Expense", "0"},
-            {"Insurance Expense", "Expense", "0"},
-            {"Advertising Expense", "Expense", "0"}
+            {"1001","Cash","Asset"},
+            {"1010","Accounts Receivable","Asset"},
+            {"1020","Prepaid Expenses","Asset"},
+            {"1030","Inventory","Asset"},
+            {"1040","Fixed Assets","Asset"},
+            {"1050","Accumulated Depreciation","Asset"},
+            {"1060","Other Assets","Asset"},
+            {"2001","Accounts Payable","Liability"},
+            {"2010","Accrued Liabilities","Liability"},
+            {"2020","Taxes Payable","Liability"},
+            {"2030","Payroll Payable","Liability"},
+            {"2040","Notes Payable","Liability"},
+            {"3001","Owner's Capital","Equity"}, 
+            {"3002","Owner's Drawing","Equity"}, 
+            {"4001","Revenue","Revenue"},
+            {"4010","Sales returns and allowances","Revenue"},
+            {"5001","Cost of Goods Sold","Expense"},
+            {"5010","Advertising Expense","Expense"},
+            {"5020","Bank Fees","Expense"},
+            {"5030","Depreciation Expense","Expense"},
+            {"5040","Payroll Tax Expense","Expense"},
+            {"5050","Rent Expense","Expense"},
+            {"5060","Supplies Expense","Expense"},
+            {"5070","Utilities Expense","Expense"},
+            {"5080","Wages Expense","Expense"},
+            {"6001","Other Expenses","Expense"}
         };
 
         for (String[] acc : predefined) {
-            accounts.add(new Account(acc[0], acc[1], Double.parseDouble(acc[2])));
+            accounts.add(new Account(acc[0], acc[1], acc[2], 0.0));
         }
     }
-    public void addAccount(String name, String type, double balance) {
-    try {
-        String sql = "INSERT INTO accounts (name, type, balance) VALUES (?, ?, ?)";
-        PreparedStatement ps = db.getConnection().prepareStatement(sql);
-        ps.setString(1, name);
-        ps.setString(2, type);
-        ps.setDouble(3, balance);
-        ps.executeUpdate();
-        ps.close();
-    } catch (SQLException e) {
-        JOptionPane.showMessageDialog(null, "Error adding account: " + e.getMessage());
-    }
+    
+    private String extractAccountName(String comboItem) {
+        return comboItem; 
     }
 
-    // ===================== Panels =====================
+    private Account getAccountByName(String name) {
+        for (Account a : accounts) {
+            if (a.getName().equals(name)) return a;
+        }
+        return null;
+    }
+
+    // --- Data Persistence Methods (New) ---
+
+    // Data structure to hold data for serialization
+    private static class AccountingData implements Serializable {
+        private static final long serialVersionUID = 2L;
+        List<Account> accounts;
+        List<Transaction> transactions;
+
+        public AccountingData(List<Account> accounts, List<Transaction> transactions) {
+            this.accounts = accounts;
+            this.transactions = transactions;
+        }
+    }
+
+    private void saveFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save Accounting File");
+        
+        int userSelection = fileChooser.showSaveDialog(this);
+        
+        if (userSelection == JFileChooser.APPROVE_OPTION) {
+            File fileToSave = fileChooser.getSelectedFile();
+            if (!fileToSave.getName().toLowerCase().endsWith(".dat")) {
+                fileToSave = new File(fileToSave.toString() + ".dat");
+            }
+            
+            try (FileOutputStream fileOut = new FileOutputStream(fileToSave);
+                 ObjectOutputStream objectOut = new ObjectOutputStream(fileOut)) {
+                
+                AccountingData data = new AccountingData(this.accounts, this.transactions);
+                objectOut.writeObject(data);
+                JOptionPane.showMessageDialog(this, "File saved successfully to:\n" + fileToSave.getAbsolutePath(), "Save Successful", JOptionPane.INFORMATION_MESSAGE);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, "Error saving file: " + ex.getMessage(), "Save Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void openFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Open Accounting File");
+        
+        int userSelection = fileChooser.showOpenDialog(this);
+        
+        if (userSelection == JFileChooser.APPROVE_OPTION) {
+            File fileToOpen = fileChooser.getSelectedFile();
+            
+            try (FileInputStream fileIn = new FileInputStream(fileToOpen);
+                 ObjectInputStream objectIn = new ObjectInputStream(fileIn)) {
+                
+                AccountingData data = (AccountingData) objectIn.readObject();
+                
+                this.accounts = data.accounts;
+                this.transactions = data.transactions;
+                
+                // Ensure accounts are re-initialized if file was empty or corrupted (safety check)
+                if (this.accounts.isEmpty()) addPredefinedAccounts();
+                
+                refreshAllViews();
+                
+                JOptionPane.showMessageDialog(this, "File loaded successfully from:\n" + fileToOpen.getAbsolutePath(), "Open Successful", JOptionPane.INFORMATION_MESSAGE);
+            } catch (FileNotFoundException ex) {
+                JOptionPane.showMessageDialog(this, "File not found.", "Open Error", JOptionPane.ERROR_MESSAGE);
+            } catch (IOException | ClassNotFoundException ex) {
+                JOptionPane.showMessageDialog(this, "Error opening file. Check the file format. Details: " + ex.getMessage(), "Open Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+    
+    // Helper method for creating styled labels
+    private JLabel createFormLabel(String text) {
+        JLabel lbl = new JLabel(text);
+        lbl.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        lbl.setForeground(PRIMARY_BLUE);
+        return lbl;
+    }
+
+
+    // --- Panel Creation Methods (Redesigned UI) ---
+
     private JPanel createAddTransactionPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
+        JPanel panel = new JPanel(new BorderLayout(15, 15));
+        panel.setBackground(BACKGROUND_LIGHT);
+        panel.setBorder(new EmptyBorder(30, 100, 30, 100)); // Added padding
+        
+        JLabel title = new JLabel("Post New Journal Entry");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        title.setForeground(PRIMARY_BLUE);
+        title.setHorizontalAlignment(SwingConstants.CENTER);
+        panel.add(title, BorderLayout.NORTH);
+
         JPanel form = new JPanel(new GridBagLayout());
+        form.setBackground(Color.WHITE);
+        form.setBorder(BorderFactory.createLineBorder(PRIMARY_BLUE.darker(), 1));
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(6,6,6,6);
+        gbc.insets = new Insets(12, 15, 12, 15);
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 1.0;
 
@@ -426,106 +364,159 @@ private void saveCSVAction() {
         creditComboGlobal = new JComboBox<>();
         JTextField amountField = new JTextField();
 
+        // Style Form Components
+        dateField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        descField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        amountField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        debitComboGlobal.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        creditComboGlobal.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        
         refreshAccountCombos();
+        
 
-        JButton postBtn = new JButton("Post Transaction");
-        JButton clearBtn = new JButton("Clear Fields");
-
-        gbc.gridx = 0; gbc.gridy = 0; form.add(new JLabel("Date (YYYY-MM-DD):"), gbc);
+        gbc.gridx = 0; gbc.gridy = 0; form.add(createFormLabel("Date (YYYY-MM-DD):"), gbc);
         gbc.gridx = 1; form.add(dateField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 1; form.add(new JLabel("Description:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 1; form.add(createFormLabel("Description:"), gbc);
         gbc.gridx = 1; form.add(descField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 2; form.add(new JLabel("Debit Account:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 2; form.add(createFormLabel("Debit Account:"), gbc);
         gbc.gridx = 1; form.add(debitComboGlobal, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 3; form.add(new JLabel("Credit Account:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 3; form.add(createFormLabel("Credit Account:"), gbc);
         gbc.gridx = 1; form.add(creditComboGlobal, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 4; form.add(new JLabel("Amount:"), gbc);
+        gbc.gridx = 0; gbc.gridy = 4; form.add(createFormLabel("Amount:"), gbc);
         gbc.gridx = 1; form.add(amountField, gbc);
+        
+        panel.add(form, BorderLayout.CENTER);
 
-        gbc.gridx = 0; gbc.gridy = 5; form.add(postBtn, gbc);
-        gbc.gridx = 1; form.add(clearBtn, gbc);
+        // Buttons Panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
+        buttonPanel.setOpaque(false);
+        JButton postBtn = createStyledButton("Post Transaction (F5)");
+        JButton clearBtn = createStyledButton("Clear Fields (Esc)");
+        
+        postBtn.setBackground(SECONDARY_MINT.darker());
+        postBtn.setForeground(Color.WHITE);
+        clearBtn.setBackground(Color.LIGHT_GRAY);
+        clearBtn.setForeground(PRIMARY_BLUE);
 
-        panel.add(form, BorderLayout.NORTH);
+        buttonPanel.add(postBtn);
+        buttonPanel.add(clearBtn);
+        
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // Action listeners remain the same
+        postBtn.addActionListener(e -> postTransaction(dateField, descField, amountField));
+        clearBtn.addActionListener(e -> clearTransactionFields(dateField, descField, amountField));
+        
+        // Add Key Bindings (F5 to post, Esc to clear)
+        InputMap inputMap = panel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = panel.getActionMap();
 
-        postBtn.addActionListener(e -> {
-            String dateStr = dateField.getText().trim();
-            String desc = descField.getText().trim();
-            String debitAccName = (String) debitComboGlobal.getSelectedItem();
-            String creditAccName = (String) creditComboGlobal.getSelectedItem();
-            String amtStr = amountField.getText().trim();
-
-            Date date;
-            try {
-                date = sdf.parse(dateStr);
-            } catch (ParseException ex) {
-                JOptionPane.showMessageDialog(this, "Invalid date format. Use YYYY-MM-DD.");
-                return;
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0), "post");
+        actionMap.put("post", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                postTransaction(dateField, descField, amountField);
             }
-
-            double amount;
-            try {
-                amount = Double.parseDouble(amtStr);
-                if (amount <= 0) throw new NumberFormatException();
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Amount must be a number greater than zero.");
-                return;
+        });
+        
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "clear");
+        actionMap.put("clear", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                clearTransactionFields(dateField, descField, amountField);
             }
-
-            if (debitAccName == null || creditAccName == null) {
-                JOptionPane.showMessageDialog(this, "Select both debit and credit accounts.");
-                return;
-            }
-            if (debitAccName.equals(creditAccName)) {
-                JOptionPane.showMessageDialog(this, "Debit and credit accounts cannot be the same.");
-                return;
-            }
-
-            Account debitAcc = getAccountByName(debitAccName);
-            Account creditAcc = getAccountByName(creditAccName);
-            if (debitAcc == null || creditAcc == null) {
-                JOptionPane.showMessageDialog(this, "Selected account not found.");
-                return;
-            }
-
-            // Apply changes
-            debitAcc.applyDebit(amount);
-            creditAcc.applyCredit(amount);
-
-            Transaction tx = new Transaction(date, desc, debitAccName, creditAccName, amount);
-            transactions.add(tx);
-            transactions.sort(Comparator.comparing(Transaction::getDate));
-
-            refreshAllViews();
-
-            JOptionPane.showMessageDialog(this, "Transaction posted.");
-            dateField.setText(sdf.format(new Date()));
-            descField.setText("");
-            amountField.setText("");
-            if (debitComboGlobal.getItemCount() > 0) debitComboGlobal.setSelectedIndex(0);
-            if (creditComboGlobal.getItemCount() > 0) creditComboGlobal.setSelectedIndex(0);
         });
 
-        clearBtn.addActionListener(e -> {
-            dateField.setText(sdf.format(new Date()));
-            descField.setText("");
-            amountField.setText("");
-            if (debitComboGlobal.getItemCount() > 0) debitComboGlobal.setSelectedIndex(0);
-            if (creditComboGlobal.getItemCount() > 0) creditComboGlobal.setSelectedIndex(0);
-        });
 
         return panel;
     }
+    
+    // Extracted transaction logic
+    private void postTransaction(JTextField dateField, JTextField descField, JTextField amountField) {
+        String dateStr = dateField.getText().trim();
+        String desc = descField.getText().trim();
+        
+        String debitAccComboItem = (String) debitComboGlobal.getSelectedItem();
+        String creditAccComboItem = (String) creditComboGlobal.getSelectedItem();
+        String debitAccName = extractAccountName(debitAccComboItem);
+        String creditAccName = extractAccountName(creditAccComboItem);
+        
+        String amtStr = amountField.getText().trim();
+
+        Date date;
+        try {
+            date = sdf.parse(dateStr);
+        } catch (ParseException ex) {
+            JOptionPane.showMessageDialog(this, "Invalid date format. Use YYYY-MM-DD.");
+            return;
+        }
+
+        double amount;
+        try {
+            amount = Double.parseDouble(amtStr);
+            if (amount <= 0) throw new NumberFormatException();
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Amount must be a number greater than zero.");
+            return;
+        }
+
+        if (debitAccName == null || creditAccName == null) {
+            JOptionPane.showMessageDialog(this, "Select both debit and credit accounts.");
+            return;
+        }
+        if (debitAccName.equals(creditAccName)) {
+            JOptionPane.showMessageDialog(this, "Debit and credit accounts cannot be the same.");
+            return;
+        }
+
+        Account debitAcc = getAccountByName(debitAccName);
+        Account creditAcc = getAccountByName(creditAccName);
+        if (debitAcc == null || creditAcc == null) {
+            JOptionPane.showMessageDialog(this, "Selected account not found.");
+            return;
+        }
+
+        debitAcc.applyDebit(amount);
+        creditAcc.applyCredit(amount);
+
+        Transaction tx = new Transaction(date, desc, debitAccName, creditAccName, amount);
+        transactions.add(tx);
+
+        transactions.sort(Comparator.comparing(Transaction::getDate));
+
+        refreshAllViews();
+
+        JOptionPane.showMessageDialog(this, "Transaction posted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+        clearTransactionFields(dateField, descField, amountField);
+    }
+    
+    private void clearTransactionFields(JTextField dateField, JTextField descField, JTextField amountField) {
+        dateField.setText(sdf.format(new Date()));
+        descField.setText("");
+        amountField.setText("");
+        if (debitComboGlobal.getItemCount() > 0) debitComboGlobal.setSelectedIndex(0);
+        if (creditComboGlobal.getItemCount() > 0) creditComboGlobal.setSelectedIndex(0);
+    }
+
 
     private JPanel createTransactionsPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel panel = createStyledPanel();
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        top.setBackground(Color.WHITE);
+        top.setBorder(new EmptyBorder(10, 10, 10, 10));
         JTextField searchField = new JTextField(30);
-        JButton searchBtn = new JButton("Search");
-        top.add(new JLabel("Search (date or description):"));
+        searchField.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        JButton searchBtn = createStyledButton("Search");
+        
+        JLabel searchLabel = new JLabel("Search (date/description/account):");
+        searchLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        searchLabel.setForeground(PRIMARY_BLUE);
+        
+        top.add(searchLabel);
         top.add(searchField);
         top.add(searchBtn);
 
@@ -533,9 +524,8 @@ private void saveCSVAction() {
         transactionsTableModel = new DefaultTableModel(columns, 0) {
             public boolean isCellEditable(int r, int c) { return false; }
         };
-        JTable table = new JTable(transactionsTableModel);
-        table.setAutoCreateRowSorter(true);
-
+        JTable table = createStyledTable(transactionsTableModel);
+        
         searchBtn.addActionListener(e -> {
             String query = searchField.getText().trim().toLowerCase();
             filterTransactions(query);
@@ -547,6 +537,181 @@ private void saveCSVAction() {
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
         return panel;
     }
+
+    private JPanel createAccountsPanel() {
+        JPanel panel = createStyledPanel();
+        
+        String[] columns = {"Acc #", "Account Name", "Type", "Current Balance"}; 
+        accountsTableModel = new DefaultTableModel(columns, 0) {
+            public boolean isCellEditable(int r,int c){ return false; }
+        };
+        JTable table = createStyledTable(accountsTableModel);
+        
+        refreshAccountsTable();
+
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createGeneralJournalPanel() {
+        JPanel panel = createStyledPanel();
+        String[] cols = {"Date", "Description", "Account", "Debit", "Credit"};
+        journalTableModel = new DefaultTableModel(cols, 0) {
+            public boolean isCellEditable(int r,int c){ return false; }
+        };
+        JTable table = createStyledTable(journalTableModel);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createGeneralLedgerPanel() {
+        JPanel panel = createStyledPanel();
+        ledgerAccountCombo = new JComboBox<>();
+        refreshLedgerAccountCombo();
+        
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        top.setBackground(Color.WHITE);
+        top.setBorder(new EmptyBorder(10, 10, 10, 10));
+        
+        JLabel selectLabel = new JLabel("Select Account:");
+        selectLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        selectLabel.setForeground(PRIMARY_BLUE);
+        
+        ledgerAccountCombo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        
+        top.add(selectLabel);
+        top.add(ledgerAccountCombo);
+
+        String[] cols = {"Date", "Description", "Debit Account", "Credit Account", "Amount", "Running Balance"};
+        ledgerTableModel = new DefaultTableModel(cols, 0) {
+            public boolean isCellEditable(int r,int c){ return false; }
+        };
+        JTable table = createStyledTable(ledgerTableModel);
+
+        ledgerAccountCombo.addActionListener(e -> {
+            String acc = (String) ledgerAccountCombo.getSelectedItem();
+            if (acc != null) updateGeneralLedgerTable(acc);
+        });
+
+        panel.add(top, BorderLayout.NORTH);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createBalanceSheetPanel() {
+        JPanel panel = createStyledPanel();
+        panel.setLayout(new GridLayout(1,2, 10, 10)); // Added spacing between panels
+        
+        // ASSETS PANEL
+        JPanel assetsPanel = createStyledSubPanel("Assets");
+        String[] assetCols = {"Account Name", "Amount"};
+        assetsTableModel = new DefaultTableModel(assetCols, 0) {
+            public boolean isCellEditable(int r,int c){ return false; }
+        };
+        JTable assetsTable = createStyledTable(assetsTableModel);
+        assetsPanel.add(new JScrollPane(assetsTable), BorderLayout.CENTER);
+        JLabel totalAssetsLabel = createTotalLabel();
+        assetsPanel.add(totalAssetsLabel, BorderLayout.SOUTH);
+
+        // LIABILITIES AND EQUITY PANEL
+        JPanel liabilitiesPanel = createStyledSubPanel("Liabilities and Equity");
+        String[] liabCols = {"Account Name", "Amount"};
+        liabilitiesTableModel = new DefaultTableModel(liabCols, 0) {
+            public boolean isCellEditable(int r,int c){ return false; }
+        };
+        JTable liabTable = createStyledTable(liabilitiesTableModel);
+        liabilitiesPanel.add(new JScrollPane(liabTable), BorderLayout.CENTER);
+        JLabel totalLiabLabel = createTotalLabel();
+        liabilitiesPanel.add(totalLiabLabel, BorderLayout.SOUTH);
+
+        panel.add(assetsPanel);
+        panel.add(liabilitiesPanel);
+
+        Runnable updateLabels = () -> {
+            totalAssetsLabel.setText("Total Assets: " + formatAccounting(calculateTotalAssets()));
+            totalLiabLabel.setText("Total Liabilities & Equity: " + formatAccounting(calculateTotalLiabilitiesAndEquity()));
+        };
+
+        updateLabels.run();
+        panel.putClientProperty("updateLabels", updateLabels);
+        return panel;
+    }
+    
+    // Styled UI helpers
+    private JPanel createStyledPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(BACKGROUND_LIGHT);
+        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        return panel;
+    }
+    
+    private JPanel createStyledSubPanel(String titleText) {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(PRIMARY_BLUE, 1),
+            titleText,
+            javax.swing.border.TitledBorder.LEADING,
+            javax.swing.border.TitledBorder.TOP,
+            new Font("Segoe UI", Font.BOLD, 16),
+            SECONDARY_MINT.darker()
+        ));
+        return panel;
+    }
+    
+    /**
+     * Creates a styled JTable, setting the header to dark blue 
+     * and minimizing selection/hover effects.
+     */
+ private JTable createStyledTable(DefaultTableModel model) {
+        JTable table = new JTable(model);
+        table.setAutoCreateRowSorter(true);
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        table.setRowHeight(25);
+        table.setFillsViewportHeight(true);
+        
+        // --- Header Styling Fixes (Row 1) ---
+        JTableHeader header = table.getTableHeader();
+        header.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        final Color HEADER_BG = PRIMARY_BLUE.darker();
+        final Color HEADER_FG = Color.WHITE;
+
+        // 1. Set the fixed background and foreground colors
+        header.setBackground(HEADER_BG);
+        header.setForeground(HEADER_FG);
+        
+        // 2. Override the default header renderer to guarantee consistent colors 
+        //    and ignore selection/focus states (which cause the unwanted 'hover' effect).
+        header.setDefaultRenderer((jTable, value, isSelected, hasFocus, row, column) -> {
+            JLabel label = new JLabel(value.toString(), SwingConstants.CENTER);
+            label.setOpaque(true);
+            label.setBackground(HEADER_BG);
+            label.setForeground(HEADER_FG);
+            label.setFont(header.getFont());
+            label.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 1, Color.LIGHT_GRAY));
+            return label;
+        });
+
+        // --- Table Row Styling Fixes (Removing Hover on Data Rows) ---
+        // Minimize/remove visual hover/selection effect for data rows
+        Color defaultTableBackground = table.getBackground();
+        Color defaultTableForeground = table.getForeground();
+        table.setSelectionBackground(defaultTableBackground);
+        table.setSelectionForeground(defaultTableForeground);
+        
+        return table;
+    }
+    
+    private JLabel createTotalLabel() {
+        JLabel label = new JLabel("", SwingConstants.RIGHT);
+        label.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        label.setForeground(PRIMARY_BLUE);
+        label.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        label.setBackground(new Color(230, 230, 230)); // Light gray background for total
+        label.setOpaque(true);
+        return label;
+    }
+    // End Styled UI helpers
 
     private void filterTransactions(String query) {
         transactionsTableModel.setRowCount(0);
@@ -563,216 +728,18 @@ private void saveCSVAction() {
                         tx.getDescription(),
                         tx.getDebitAccount(),
                         tx.getCreditAccount(),
-                        formatAccounting(tx.getAmount())
+                        formatCurrency(tx.getAmount())
                 });
             }
         }
     }
 
-    private JPanel createAccountsPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        String[] columns = {"Account Name", "Type", "Current Balance"};
-        accountsTableModel = new DefaultTableModel(columns, 0) {
-            public boolean isCellEditable(int r,int c){ return false; }
-        };
-        JTable table = new JTable(accountsTableModel);
-        table.setAutoCreateRowSorter(true);
-
-        JPanel addPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(6,6,6,6);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weightx = 1.0;
-
-        JTextField nameField = new JTextField();
-        JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Asset", "Liability", "Owner's Equity", "Revenue", "Expense"});
-        JTextField balanceField = new JTextField();
-        JButton addBtn = new JButton("Add Account");
-
-        gbc.gridx = 0; gbc.gridy = 0; addPanel.add(new JLabel("Name:"), gbc);
-        gbc.gridx = 1; addPanel.add(nameField, gbc);
-        gbc.gridx = 0; gbc.gridy = 1; addPanel.add(new JLabel("Type:"), gbc);
-        gbc.gridx = 1; addPanel.add(typeCombo, gbc);
-        gbc.gridx = 0; gbc.gridy = 2; addPanel.add(new JLabel("Initial Balance (optional):"), gbc);
-        gbc.gridx = 1; addPanel.add(balanceField, gbc);
-        gbc.gridx = 0; gbc.gridy = 3; addPanel.add(new JLabel(""), gbc);
-        gbc.gridx = 1; addPanel.add(addBtn, gbc);
-
-        addBtn.addActionListener(e -> {
-            String name = nameField.getText().trim();
-            if (name.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Enter account name.");
-                return;
-            }
-            if (getAccountByName(name) != null) {
-                JOptionPane.showMessageDialog(this, "An account with this name already exists.");
-                return;
-            }
-            String type = (String) typeCombo.getSelectedItem();
-            double initBal = 0.0;
-            if (!balanceField.getText().trim().isEmpty()) {
-                try {
-                    initBal = Double.parseDouble(balanceField.getText().trim());
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(this, "Invalid initial balance. Use a number.");
-                    return;
-                }
-            }
-            accounts.add(new Account(name, type, initBal));
-            refreshAllViews();
-            nameField.setText("");
-            balanceField.setText("");
-            typeCombo.setSelectedIndex(0);
-            JOptionPane.showMessageDialog(this, "Account added.");
-        });
-
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
-        panel.add(addPanel, BorderLayout.SOUTH);
-        return panel;
-    }
-
-    private JPanel createGeneralJournalPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        String[] cols = {"Date", "Description", "Account", "Debit", "Credit"};
-        journalTableModel = new DefaultTableModel(cols, 0) {
-            public boolean isCellEditable(int r,int c){ return false; }
-        };
-        JTable table = new JTable(journalTableModel);
-        table.setAutoCreateRowSorter(true);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
-        return panel;
-    }
-
-    private JPanel createGeneralLedgerPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        ledgerAccountCombo = new JComboBox<>();
-        refreshLedgerAccountCombo();
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        top.add(new JLabel("Select Account:"));
-        top.add(ledgerAccountCombo);
-
-        String[] cols = {"Date", "Description", "Debit Account", "Credit Account", "Amount", "Running Balance"};
-        ledgerTableModel = new DefaultTableModel(cols, 0) {
-            public boolean isCellEditable(int r,int c){ return false; }
-        };
-        JTable table = new JTable(ledgerTableModel);
-        table.setAutoCreateRowSorter(true);
-
-        ledgerAccountCombo.addActionListener(e -> {
-            String acc = (String) ledgerAccountCombo.getSelectedItem();
-            if (acc != null) updateGeneralLedgerTable(acc);
-        });
-
-        panel.add(top, BorderLayout.NORTH);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
-        return panel;
-    }
-
-    private JPanel createBalanceSheetPanel() {
-        JPanel panel = new JPanel(new GridLayout(1,2));
-
-        JPanel assetsPanel = new JPanel(new BorderLayout());
-        assetsPanel.add(new JLabel("Assets", SwingConstants.CENTER), BorderLayout.NORTH);
-        String[] assetCols = {"Account Name", "Amount"};
-        assetsTableModel = new DefaultTableModel(assetCols, 0) {
-            public boolean isCellEditable(int r,int c){ return false; }
-        };
-        JTable assetsTable = new JTable(assetsTableModel);
-        assetsTable.setAutoCreateRowSorter(true);
-        assetsPanel.add(new JScrollPane(assetsTable), BorderLayout.CENTER);
-
-        totalAssetsLabel = new JLabel("", SwingConstants.RIGHT);
-        assetsPanel.add(totalAssetsLabel, BorderLayout.SOUTH);
-
-        JPanel liabilitiesPanel = new JPanel(new BorderLayout());
-        liabilitiesPanel.add(new JLabel("Liabilities and Owner's Equity", SwingConstants.CENTER), BorderLayout.NORTH);
-        String[] liabCols = {"Account Name", "Amount"};
-        liabilitiesTableModel = new DefaultTableModel(liabCols, 0) {
-            public boolean isCellEditable(int r,int c){ return false; }
-        };
-        JTable liabTable = new JTable(liabilitiesTableModel);
-        liabTable.setAutoCreateRowSorter(true);
-        liabilitiesPanel.add(new JScrollPane(liabTable), BorderLayout.CENTER);
-
-        totalLiabLabel = new JLabel("", SwingConstants.RIGHT);
-        liabilitiesPanel.add(totalLiabLabel, BorderLayout.SOUTH);
-
-        panel.add(assetsPanel);
-        panel.add(liabilitiesPanel);
-
-        panel.putClientProperty("updateLabels", (Runnable) () -> {
-            totalAssetsLabel.setText("Total Assets: " + formatAccounting(calculateTotalAssets()));
-            totalLiabLabel.setText("Total Liabilities and Equity: " + formatAccounting(calculateTotalLiabilitiesAndEquity()));
-        });
-
-        return panel;
-    }
-
-    // ===================== Helpers =====================
-    private String formatNumber(double value) {
-        NumberFormat nf = NumberFormat.getNumberInstance(Locale.US);
-        nf.setMinimumFractionDigits(2);
-        nf.setMaximumFractionDigits(2);
-        return nf.format(value);
-    }
-
-    private String formatAccounting(double value) {
-        if (value < 0) {
-            return "(" + formatNumber(Math.abs(value)) + ")";
-        }
-        return formatNumber(value);
-    }
-
-    private Account getAccountByName(String name) {
+    private void refreshAccountsTable() {
+        if (accountsTableModel == null) return;
+        accountsTableModel.setRowCount(0);
         for (Account a : accounts) {
-            if (a.getName().equals(name)) return a;
+            accountsTableModel.addRow(new Object[]{a.getAccountNumber(), a.getName(), a.getType(), formatAccounting(a.getBalance())});
         }
-        return null;
-    }
-
-    private List<String> getDebitAccountNames() {
-        List<String> out = new ArrayList<>();
-        for (Account a : accounts) out.add(a.getName());
-        return out;
-    }
-
-    private List<String> getCreditAccountNames() {
-        List<String> out = new ArrayList<>();
-        for (Account a : accounts) out.add(a.getName());
-        return out;
-    }
-
-    private List<String> getAllAccountNames() {
-        List<String> out = new ArrayList<>();
-        for (Account a : accounts) out.add(a.getName());
-        return out;
-    }
-
-    private List<String> getAllAccountNamesSorted() {
-        List<String> list = getAllAccountNames();
-        Collections.sort(list);
-        return list;
-    }
-
-    private void refreshAccountCombos() {
-        List<String> debits = getDebitAccountNames();
-        List<String> credits = getCreditAccountNames();
-
-        if (debitComboGlobal != null) {
-            debitComboGlobal.removeAllItems();
-            for (String s : debits) debitComboGlobal.addItem(s);
-        }
-        if (creditComboGlobal != null) {
-            creditComboGlobal.removeAllItems();
-            for (String s : credits) creditComboGlobal.addItem(s);
-        }
-    }
-
-    private void refreshLedgerAccountCombo() {
-        if (ledgerAccountCombo == null) return;
-        ledgerAccountCombo.removeAllItems();
-        for (String s : getAllAccountNamesSorted()) ledgerAccountCombo.addItem(s);
-        if (ledgerAccountCombo.getItemCount() > 0) ledgerAccountCombo.setSelectedIndex(0);
     }
 
     private void updateGeneralLedgerTable(String accountName) {
@@ -781,82 +748,148 @@ private void saveCSVAction() {
         if (acc == null) return;
 
         double running = 0.0;
+        
+        boolean normalBalanceIsDebit = acc.getType().equals("Asset") || acc.getType().equals("Expense") || acc.getName().equals("Owner's Drawing");
+
         for (Transaction tx : transactions) {
             double amount = tx.getAmount();
             String dateStr = sdf.format(tx.getDate());
-            boolean added = false;
+            
+            // Debit Effect
             if (tx.getDebitAccount().equals(accountName)) {
-                if (acc.getType().equals("Asset") || acc.getType().equals("Expense")) {
-                    running += amount;
+                if (normalBalanceIsDebit) {
+                    running += amount; 
                 } else {
-                    running -= amount;
+                    running -= amount; 
                 }
                 ledgerTableModel.addRow(new Object[]{dateStr, tx.getDescription(), tx.getDebitAccount(), tx.getCreditAccount(),
-                        formatAccounting(amount),
+                        formatCurrency(amount), 
                         formatAccounting(running)});
-                added = true;
             }
+            
+            // Credit Effect
             if (tx.getCreditAccount().equals(accountName)) {
-                if (acc.getType().equals("Liability") || acc.getType().equals("Owner's Equity") || acc.getType().equals("Revenue")) {
-                    running += amount;
+                if (normalBalanceIsDebit) {
+                    running -= amount; 
                 } else {
-                    running -= amount;
+                    running += amount; 
                 }
                 ledgerTableModel.addRow(new Object[]{dateStr, tx.getDescription(), tx.getDebitAccount(), tx.getCreditAccount(),
-                        formatAccounting(amount),
+                        formatCurrency(amount), 
                         formatAccounting(running)});
-                added = true;
             }
-            // If no direct debit/credit on this account, skip
         }
     }
-    public void addTransaction(Date date, String desc, String debit, String credit, double amount) {
-    try {
-        String sql = "INSERT INTO transactions (tx_date, description, debit_account, credit_account, amount) VALUES (?, ?, ?, ?, ?)";
-        PreparedStatement ps = db.getConnection().prepareStatement(sql);
-        ps.setDate(1, new java.sql.Date(date.getTime()));
-        ps.setString(2, desc);
-        ps.setString(3, debit);
-        ps.setString(4, credit);
-        ps.setDouble(5, amount);
-        ps.executeUpdate();
-        ps.close();
 
-        // Update balances
-        updateAccountBalance(debit, amount, true);
-        updateAccountBalance(credit, amount, false);
-
-    } catch (SQLException e) {
-        JOptionPane.showMessageDialog(null, "Error adding transaction: " + e.getMessage());
+    private List<String> getAllAccountNames() {
+        List<String> out = new ArrayList<>();
+        for (Account a : accounts) out.add(a.getName());
+        return out;
     }
-}
 
-private void updateAccountBalance(String accName, double amount, boolean isDebit) throws SQLException {
-    String getTypeSQL = "SELECT type, balance FROM accounts WHERE name=?";
-    PreparedStatement ps = db.getConnection().prepareStatement(getTypeSQL);
-    ps.setString(1, accName);
-    ResultSet rs = ps.executeQuery();
-    if (rs.next()) {
-        String type = rs.getString("type");
-        double balance = rs.getDouble("balance");
+    private void refreshAccountCombos() {
+        List<String> allAccountNames = getAllAccountNames();
 
-        if (isDebit) {
-            if (type.equals("Asset") || type.equals("Expense")) balance += amount;
-            else balance -= amount;
-        } else {
-            if (type.equals("Liability") || type.equals("Owner's Equity") || type.equals("Revenue")) balance += amount;
-            else balance -= amount;
+        if (debitComboGlobal != null) {
+            debitComboGlobal.removeAllItems();
+            for (String s : allAccountNames) debitComboGlobal.addItem(s);
+        }
+        if (creditComboGlobal != null) {
+            creditComboGlobal.removeAllItems();
+            for (String s : allAccountNames) creditComboGlobal.addItem(s);
+        }
+    }
+
+    private void refreshLedgerAccountCombo() {
+        if (ledgerAccountCombo == null) return;
+        ledgerAccountCombo.removeAllItems();
+        for (String s : getAllAccountNames()) ledgerAccountCombo.addItem(s);
+    }
+
+    // --- Refresh All Views ---
+
+    private void refreshAllViews() {
+        if (transactionsTableModel != null) {
+            filterTransactions("");
+        }
+        
+        refreshAccountsTable(); 
+
+        if (journalTableModel != null) {
+            journalTableModel.setRowCount(0);
+            for (Transaction tx : transactions) {
+                String dateStr = sdf.format(tx.getDate());
+                // debit row
+                journalTableModel.addRow(new Object[]{dateStr, tx.getDescription(), tx.getDebitAccount(),
+                        formatCurrency(tx.getAmount()), ""});
+                // credit row
+                journalTableModel.addRow(new Object[]{dateStr, tx.getDescription(), tx.getCreditAccount(),
+                        "", formatCurrency(tx.getAmount())});
+            }
         }
 
-        String updateSQL = "UPDATE accounts SET balance=? WHERE name=?";
-        PreparedStatement ups = db.getConnection().prepareStatement(updateSQL);
-        ups.setDouble(1, balance);
-        ups.setString(2, accName);
-        ups.executeUpdate();
-        ups.close();
+        refreshLedgerAccountCombo();
+        if (ledgerAccountCombo != null && ledgerAccountCombo.getItemCount() > 0) {
+            String sel = (String) ledgerAccountCombo.getSelectedItem();
+            if (sel == null) sel = ledgerAccountCombo.getItemAt(0);
+            ledgerAccountCombo.setSelectedItem(sel);
+            updateGeneralLedgerTable(sel);
+        }
+
+        if (assetsTableModel != null && liabilitiesTableModel != null) {
+            assetsTableModel.setRowCount(0);
+            liabilitiesTableModel.setRowCount(0);
+            
+            for (Account a : accounts) {
+                if (a.getType().equals("Asset")) {
+                    assetsTableModel.addRow(new Object[]{a.getName(), formatAccounting(a.getBalance())});
+                } else if (a.getType().equals("Liability")) {
+                    liabilitiesTableModel.addRow(new Object[]{a.getName(), formatAccounting(a.getBalance())});
+                }
+            }
+            
+            double totalEquity = calculateProprietorshipEquity();
+            liabilitiesTableModel.addRow(new Object[]{"", ""}); // Separator
+            liabilitiesTableModel.addRow(new Object[]{"Owner's Equity (Ending Balance)", formatAccounting(totalEquity)});
+        }
+
+        refreshAccountCombos();
+
+        // run any UI label updaters (balance sheet totals)
+        if (mainTabbedPane != null) {
+            for (int i = 0; i < mainTabbedPane.getTabCount(); i++) {
+                Component c = mainTabbedPane.getComponentAt(i);
+                if (c instanceof JPanel) {
+                    Object prop = ((JPanel) c).getClientProperty("updateLabels");
+                    if (prop instanceof Runnable) ((Runnable) prop).run();
+                }
+            }
+        }
     }
-    rs.close();
-    ps.close();
+    // --- End Refresh All Views ---
+    
+    // --- Financial Calculations ---
+    
+    private double calculateProprietorshipEquity() {
+        double capital = 0;
+        double drawing = 0;
+        double revenue = 0;
+        double expense = 0;
+
+        for (Account a : accounts) {
+            if (a.getName().equals("Owner's Capital")) {
+                capital = a.getBalance();
+            } else if (a.getName().equals("Owner's Drawing")) {
+                drawing = a.getBalance();
+            } else if (a.getType().equals("Revenue")) {
+                revenue += a.getBalance();
+            } else if (a.getType().equals("Expense")) {
+                expense += a.getBalance();
+            }
+        }
+
+        double netIncome = revenue - expense;
+        return capital + netIncome - drawing; 
     }
 
     private double calculateTotalAssets() {
@@ -866,171 +899,21 @@ private void updateAccountBalance(String accName, double amount, boolean isDebit
     }
 
     private double calculateTotalLiabilitiesAndEquity() {
-        double total = 0;
-        double capital = 0;
-        double drawing = 0;
-        double revenue = 0;
-        double expense = 0;
-
+        double totalLiabilities = 0;
+        
         for (Account a : accounts) {
-            switch (a.getType()) {
-                case "Liability":
-                    total += a.getBalance();
-                    break;
-                case "Owner's Equity":
-                    if (a.getName().equals("Owner's Capital"))
-                        capital += a.getBalance();
-                    else if (a.getName().equals("Owner's Drawing"))
-                        drawing += a.getBalance();
-                    break;
-                case "Revenue":
-                    revenue += a.getBalance();
-                    break;
-                case "Expense":
-                    expense += a.getBalance();
-                    break;
+            if (a.getType().equals("Liability")) {
+                totalLiabilities += a.getBalance();
             }
         }
-
-        double netIncome = revenue - expense;
-        double equity = capital - drawing + netIncome;
-
-        return total + equity;
+        
+        double totalEquity = calculateProprietorshipEquity();
+        
+        return totalLiabilities + totalEquity; 
     }
 
-    private void refreshAllViews() {
-        // Transactions tab
-        if (transactionsTableModel != null) {
-            filterTransactions("");
-        }
-
-        // Accounts tab
-        if (accountsTableModel != null) {
-            accountsTableModel.setRowCount(0);
-            for (Account a : accounts) {
-                accountsTableModel.addRow(new Object[]{a.getName(), a.getType(), formatAccounting(a.getBalance())});
-            }
-        }
-
-        // Journal
-        if (journalTableModel != null) {
-            journalTableModel.setRowCount(0);
-            for (Transaction tx : transactions) {
-                String dateStr = sdf.format(tx.getDate());
-                // debit row
-                journalTableModel.addRow(new Object[]{
-                        dateStr, tx.getDescription(), tx.getDebitAccount(),
-                        formatAccounting(tx.getAmount()), ""
-                });
-                journalTableModel.addRow(new Object[]{
-                        dateStr, tx.getDescription(), tx.getCreditAccount(),
-                        "", formatAccounting(tx.getAmount())
-                });
-            }
-        }
-
-        // Ledger combos and table
-        refreshLedgerAccountCombo();
-        if (ledgerAccountCombo != null && ledgerAccountCombo.getItemCount() > 0) {
-            String sel = (String) ledgerAccountCombo.getSelectedItem();
-            if (sel == null) sel = ledgerAccountCombo.getItemAt(0);
-            ledgerAccountCombo.setSelectedItem(sel);
-            updateGeneralLedgerTable(sel);
-        }
-
-        // Balance sheet tables
-        if (assetsTableModel != null && liabilitiesTableModel != null) {
-            assetsTableModel.setRowCount(0);
-            liabilitiesTableModel.setRowCount(0);
-            for (Account a : accounts) {
-                if (a.getType().equals("Asset")) {
-                    assetsTableModel.addRow(new Object[]{a.getName(), formatAccounting(a.getBalance())});
-                } else if (a.getType().equals("Liability") || a.getType().equals("Owner's Equity")) {
-                    liabilitiesTableModel.addRow(new Object[]{a.getName(), formatAccounting(a.getBalance())});
-                }
-            }
-        }
-
-        // Account combos in add-transaction panel
-        refreshAccountCombos();
-
-        // Run any UI label updaters (balance sheet totals)
-        Component center = getContentPane().getComponent(1); // tabbed pane
-        if (center instanceof JTabbedPane) {
-            JTabbedPane tp = (JTabbedPane) center;
-            for (int i = 0; i < tp.getTabCount(); i++) {
-                Component c = tp.getComponentAt(i);
-                if (c instanceof JPanel) {
-                    Object prop = ((JPanel) c).getClientProperty("updateLabels");
-                    if (prop instanceof Runnable) ((Runnable) prop).run();
-                }
-            }
-        }
-    }
-
-    // ===================== DatabaseManager (optional) =====================
-    // Note: this uses in-memory SQLite. You must add sqlite-jdbc jar to classpath for DB features.
-public class DatabaseManagerMySQL {
-    private Connection conn;
-
-    public DatabaseManagerMySQL() {
-        String url = "jdbc:mysql://localhost:3306/accounting_db"; // database name
-        String user = "root"; // imong MySQL user
-        String pass = "your_password"; // imong password
-
-        try {
-            conn = DriverManager.getConnection(url, user, pass);
-            createTables(); // auto-create kung wala pa
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(null, "Database connection failed: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void createTables() throws SQLException {
-        String createAccounts = """
-            CREATE TABLE IF NOT EXISTS accounts (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(100) UNIQUE NOT NULL,
-                type VARCHAR(50) NOT NULL,
-                balance DOUBLE DEFAULT 0
-            )
-        """;
-
-        String createTransactions = """
-            CREATE TABLE IF NOT EXISTS transactions (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                tx_date DATE NOT NULL,
-                description VARCHAR(255),
-                debit_account VARCHAR(100),
-                credit_account VARCHAR(100),
-                amount DOUBLE
-            )
-        """;
-
-        conn.createStatement().execute(createAccounts);
-        conn.createStatement().execute(createTransactions);
-    }
-
-    public Connection getConnection() { return conn; }
-}
-
-
-        public void cleanup() {
-            try {
-                if (conn != null && !conn.isClosed()) {
-                    conn.close();
-                    logger.info("Database connection closed - all data cleared");
-                }
-            } catch (SQLException e) {
-                logger.severe("Error closing database: " + e.getMessage());
-            }
-        }
-    }
-
-    // ===================== Main =====================
+    // --- Main Method ---
     public static void main(String[] args) {
-        // Use SwingUtilities to start GUI on EDT
-        SwingUtilities.invokeLater(() -> new LoginForm());
+        SwingUtilities.invokeLater(() -> new AccountingApp());
     }
 }
