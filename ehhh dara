@@ -1,0 +1,16 @@
+String[] assetCols = {"Account Name", "Amount"};
+
+assetsTableModel = new DefaultTableModel(assetCols, 0) {
+    @Override
+    public boolean isCellEditable(int r, int c) {
+        return false; 
+    }
+};
+
+JTable assetsTable = new JTable(assetsTableModel);
+assetsTable.setFillsViewportHeight(true);
+
+JScrollPane assetScroll = new JScrollPane(assetsTable);
+
+JPanel assetsPanel = new JPanel(new BorderLayout());
+assetsPanel.add(assetScroll, BorderLayout.CENTER);
