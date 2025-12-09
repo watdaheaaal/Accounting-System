@@ -11,8 +11,10 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
 import java.text.NumberFormat;
+import javax.tools.Tool;
 
-// ===================== ACCOUNTING APP (Standalone) ===================== //
+
+// Main class sa accounting app
 public class AccountingApp extends JFrame {
 
     // --- Private Fields ---
@@ -39,6 +41,19 @@ public class AccountingApp extends JFrame {
     private final Color BACKGROUND_LIGHT = new Color(245, 248, 250);
 
     public AccountingApp() {
+        try {
+            Image icon = Toolkit.getDefaultToolkit().getImage(AccountingApp.class.getResource("/img/accountingIcon.png"));
+            if (icon != null) {
+                setIconImage(icon);
+            } else {
+                System.err.println("Icon file not found. Check path: /img/accountingIcon.png");
+            }
+        } catch (Exception e) {
+            System.err.println("Error setting icon: " + e.getMessage());
+        }
+
+
+        setIconImage(Toolkit.getDefaultToolkit().getImage(getClass().getResource("/img/accountingIcon.png")));
         // Set up formatting and data
         setLayout(new BorderLayout());
         sdf.setLenient(false);
@@ -991,6 +1006,9 @@ public class AccountingApp extends JFrame {
 
     // --- Main Method ---
     public static void main(String[] args) {
+        // Jframe_Icon fic = new Jframe_Icon();
+        // fic.setVisible(true);
+
         SwingUtilities.invokeLater(() -> new AccountingApp());
     }
 }
